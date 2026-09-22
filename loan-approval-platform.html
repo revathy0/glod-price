@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Loan Approval — Prediction Platform</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<style>
+  :root {
+    --ink: #0B1210;
+    --panel: rgba(20,28,24,0.72);
+    --panel-solid: #131C17;
+    --border: #2A362E;
+    --border-soft: #202A24;
+    --text: #E9EDE6;
+    --muted: #93A398;
+    --muted-dim: #5B6960;
+    --brass: #B99B5B;
+    --approve: #6FA37D;
+    --deny: #C1544A;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--ink); }
+  body {
+    font-family: 'Iowan Old Style', 'Palatino Linotype', Georgia, 'Times New Roman', serif;
+    color: var(--text);
+    position: relative;
+    overflow-x: hidden;
+  }
+  #bgCanvas {
+    position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0;
+  }
+  #bgFade {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background: linear-gradient(180deg, rgba(11,18,16,0.25) 0%, rgba(11,18,16,0.55) 55%, var(--ink) 100%);
+    height: 620px;
+  }
+  .wrap { position: relative; z-index: 1; max-width: 1140px; margin: 0 auto; padding: 56px 28px 80px; }
+
+  .eyebrow { font-size: 13px; color: var(--brass); letter-spacing: .02em; margin-bottom: 10px; }
+  h1 { font-size: clamp(28px, 4.2vw, 44px); line-height: 1.14; font-weight: 500; margin: 0 0 16px; max-width: 680px; color: #F3F1E7; }
+  .lede { font-size: 15.5px; color: var(--muted); max-width: 600px; line-height: 1.65; margin: 0 0 46px; }
+
+  .section-label { font-size: 12.5px; color: var(--muted); margin-bottom: 14px; font-style: italic; }
+
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 4px;
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  }
+  .card-solid { background: rgba(19,28,23,0.55); border: 1px solid var(--border); border-radius: 4px; }
+
+  .hero-grid { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 28px; margin-bottom: 54px; }
+  @media (max-width: 860px) { .hero-grid { grid-template-columns: 1fr; } .two-col { grid-template-columns: 1fr !important; } .fields-grid { grid-template-columns: 1fr !important; } }
+
+  .panel-pad { padding: 26px 28px; }
+  .panel-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }
+
+  .presets { display: flex; gap: 8px; flex-wrap: wrap; }
+  .preset-btn {
+    font-size: 11px; padding: 5px 10px; border-radius: 2px; cursor: pointer; background: transparent;
+    border: 1px solid var(--border); color: var(--muted); font-family: inherit; transition: border-color .16s ease, color .16s ease;
+  }
+  .preset-btn:hover, .preset-btn.active { border-color: var(--brass); color: var(--text); }
+
+  .fields-grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 30px; }
+
+  .field { margin-bottom: 18px; }
+  .field-label { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 7px; font-size: 13.5px; color: #C6D0C8; }
+  .field-value { font-size: 13.5px; color: var(--text); font-variant-numeric: tabular-nums; }
+  .field-value .unit { color: var(--muted-dim); font-size: 11.5px; margin-left: 3px; }
+
+  .slider-track { position: relative; height: 22px; display: flex; align-items: center; }
+  .slider-fill { position: absolute; left: 0; right: 0; height: 3px; border-radius: 2px; background: var(--border-soft); }
+  .slider-fill-inner { position: absolute; left: 0; height: 3px; border-radius: 2px; background: #3A4A3F; }
+  input[type=range] {
+    -webkit-appearance: none; appearance: none; width: 100%; background: transparent; position: relative; z-index: 2; cursor: pointer; height: 22px;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 15px; height: 15px; border-radius: 50%;
+    background: var(--text); border: 2px solid var(--ink); box-shadow: 0 0 0 1px var(--brass); cursor: pointer; margin-top: -6px;
+  }
+  input[type=range]::-moz-range-thumb {
+    width: 13px; height: 13px; border-radius: 50%; background: var(--text); border: 2px solid var(--brass); cursor: pointer;
+  }
+  input[type=range]::-webkit-slider-runnable-track { height: 3px; background: transparent; }
+  input[type=range]::-moz-range-track { height: 3px; background: transparent; }
+
+  .toggle-row { display: flex; gap: 8px; }
+  .toggle-btn {
+    flex: 1; text-align: center; padding: 8px 6px; font-size: 12.5px; border-radius: 2px; cursor: pointer;
+    background: #101812; border: 1px solid var(--border); color: var(--muted); font-family: inherit;
+    transition: border-color .16s ease, color .16s ease, background .16s ease;
+  }
+  .toggle-btn.active { border-color: var(--brass); color: var(--text); background: #1A2419; }
+
+  .decision-panel { padding: 30px 24px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .stamp {
+    font-size: 30px; font-weight: 700; letter-spacing: 0.06em; padding: 10px 22px; border-radius: 3px;
+    border: 3px solid currentColor; transform: rotate(-4deg); text-transform: uppercase;
+    transition: color 350ms ease, border-color 350ms ease;
+  }
+  .prob-num { font-size: 15px; margin-top: 16px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .prob-num b { color: var(--text); font-size: 20px; }
+
+  .stat-row { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 28px; }
+  .stat-card { background: var(--panel-solid); border: 1px solid var(--border); border-radius: 3px; padding: 14px 16px; flex: 1 1 130px; }
+  .stat-val { font-size: 21px; color: #EDE9DA; font-weight: 700; font-family: 'Courier New', monospace; }
+  .stat-val.brass { color: var(--brass); }
+  .stat-label { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
+  .stat-sub { font-size: 10.5px; color: var(--muted-dim); margin-top: 2px; }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-bottom: 54px; }
+  .chart-note { font-size: 11px; color: var(--muted-dim); padding: 8px 4px 16px; line-height: 1.5; }
+
+  .cm-grid { display: grid; grid-template-columns: auto 1fr 1fr; gap: 1px; font-size: 12.5px; }
+  .cm-head { text-align: center; color: var(--muted-dim); padding-bottom: 6px; }
+  .cm-rowlabel { color: var(--muted-dim); display: flex; align-items: center; padding-right: 8px; }
+  .cm-cell { text-align: center; padding: 14px 0; font-size: 18px; }
+  .cm-good { background: #16261B; color: var(--approve); }
+  .cm-bad { background: #281815; color: var(--deny); }
+
+  .divider { height: 1px; background: linear-gradient(90deg, transparent, var(--border), transparent); margin: 0 0 54px; }
+
+  .legend { display: flex; gap: 18px; font-size: 11.5px; color: var(--muted); margin-top: 8px; flex-wrap: wrap; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; }
+
+  .footer-note { margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--border-soft); font-size: 11.5px; color: var(--muted-dim); line-height: 1.65; }
+
+  canvas.chartjs { max-width: 100%; }
+</style>
+</head>
+<body>
+
+<canvas id="bgCanvas"></canvas>
+<div id="bgFade"></div>
+
+<div class="wrap">
+
+  <div class="eyebrow" id="dateRange">Loan approval dataset · linear SVM</div>
+  <h1>Eleven fields on an application, resolved into one decision.</h1>
+  <p class="lede">
+    Set an applicant's profile below and the ledger overhead settles into green or red with the outcome.
+    The scoring underneath is the same linear support-vector machine trained in the uploaded notebook — this page
+    only adds a standardized copy of it so probabilities and a live gauge are possible.
+  </p>
+
+  <div class="hero-grid">
+    <div class="card panel-pad">
+      <div class="panel-head">
+        <div class="section-label" style="margin-bottom:0;">Applicant profile</div>
+        <div class="presets" id="presetRow"></div>
+      </div>
+      <div class="fields-grid" id="fieldsGrid"></div>
+    </div>
+
+    <div class="card decision-panel">
+      <div class="stamp" id="stampText">—</div>
+      <div class="prob-num">estimated approval probability — <b id="probText">—</b></div>
+      <div style="font-size:12px; color:var(--muted-dim); margin-top:14px; text-align:center; max-width:220px;" id="verdictNote"></div>
+    </div>
+  </div>
+
+  <div class="section-label">What is driving the decision — signed weight of each field in the trained SVM</div>
+  <div class="card-solid" style="padding:20px 24px 8px; margin-bottom:54px;">
+    <canvas id="coefChart" height="230"></canvas>
+    <div class="chart-note">Credit history carries nearly all the weight here — every other field's influence is close to zero by comparison. Watch the bars barely move as you adjust income or loan amount, then flip the credit-history toggle.</div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="section-label" id="perfLabel">How the model performs — held-out test split</div>
+  <div class="stat-row" id="statRow"></div>
+
+  <div class="two-col">
+    <div class="card-solid" style="padding:20px 24px;">
+      <div class="section-label">Confusion matrix</div>
+      <div class="cm-grid" id="cmGrid"></div>
+      <div class="chart-note" id="cmNote"></div>
+    </div>
+    <div class="card-solid" style="padding:20px 24px;">
+      <div class="section-label" id="rocLabel">ROC curve</div>
+      <canvas id="rocChart" height="230"></canvas>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div class="card-solid" style="padding:20px 24px;">
+      <div class="section-label">Approval rate by credit history</div>
+      <canvas id="creditBarChart" height="200"></canvas>
+    </div>
+    <div class="card-solid" style="padding:20px 24px;">
+      <div class="section-label">Approval rate by property area</div>
+      <canvas id="propBarChart" height="200"></canvas>
+    </div>
+  </div>
+
+  <div class="section-label">Where this applicant falls — applicant income vs. loan amount</div>
+  <div class="card-solid" style="padding:20px 24px; margin-bottom:24px;">
+    <canvas id="scatterChart" height="280"></canvas>
+    <div class="legend">
+      <span><span class="dot" style="background:var(--deny)"></span>historically denied</span>
+      <span><span class="dot" style="background:var(--approve)"></span>historically approved</span>
+      <span><span class="dot" style="background:var(--brass)"></span>current applicant</span>
+    </div>
+  </div>
+
+  <div class="footer-note" id="footerNote"></div>
+</div>
+
+<script>
+/* ---------------------------------------------------------------------
+   MODEL — extracted from the uploaded notebook's linear SVM
+   (dropna → label-encode → SVC(kernel='linear')). A standardized copy
+   with probability=True is fit alongside it purely so this page can
+   show a live probability gauge; the reported accuracy figures below
+   are the notebook's own unscaled model.
+--------------------------------------------------------------------- */
+const MODEL = {"feature_names": ["Gender", "Married", "Dependents", "Education", "Self_Employed", "ApplicantIncome", "CoapplicantIncome", "LoanAmount", "Loan_Amount_Term", "Credit_History", "Property_Area"], "scaler_mean": [0.8171296296296297, 0.6412037037037037, 0.8564814814814815, 0.7986111111111112, 0.14583333333333334, 5541.206018518518, 1563.9118518255555, 146.47916666666666, 342.22222222222223, 0.8634259259259259, 1.0069444444444444], "scaler_scale": [0.38656021265900337, 0.4796472808849818, 1.2295567665828435, 0.40103790883280305, 0.35293904887702954, 5917.2570023697135, 2682.850524365114, 82.74122719106438, 64.33726719885826, 0.34339714088047296, 0.7890734819245563], "svm_coef": [5.934663729184608e-05, 4.545957995991112e-05, -3.137994563318092e-05, -2.013303944047029e-05, -1.8005061058493088e-05, -1.4107975808988482e-05, -8.703765098230787e-05, -1.4292572885141186e-06, 2.7620478171575242e-05, 0.6868531432374783, 7.947273028968695e-06], "svm_intercept": 0.7268827927299308, "probA": -1.8029434371766195, "probB": -0.4950900459009858, "feature_stats": {"Gender": {"min": 0.0, "max": 1.0, "mean": 0.821, "median": 1.0}, "Married": {"min": 0.0, "max": 1.0, "mean": 0.648, "median": 1.0}, "Dependents": {"min": 0.0, "max": 4.0, "mean": 0.862, "median": 0.0}, "Education": {"min": 0.0, "max": 1.0, "mean": 0.798, "median": 1.0}, "Self_Employed": {"min": 0.0, "max": 1.0, "mean": 0.138, "median": 0.0}, "ApplicantIncome": {"min": 150.0, "max": 81000.0, "mean": 5364.231, "median": 3859.0}, "CoapplicantIncome": {"min": 0.0, "max": 33837.0, "mean": 1581.094, "median": 1084.5}, "LoanAmount": {"min": 9.0, "max": 600.0, "mean": 144.735, "median": 128.0}, "Loan_Amount_Term": {"min": 36.0, "max": 480.0, "mean": 342.05, "median": 360.0}, "Credit_History": {"min": 0.0, "max": 1.0, "mean": 0.854, "median": 1.0}, "Property_Area": {"min": 0.0, "max": 2.0, "mean": 1.023, "median": 1.0}}, "metrics": {"notebook_train_accuracy": 0.7986, "notebook_test_accuracy": 0.8333, "scaled_train_accuracy": 0.8056, "scaled_test_accuracy": 0.8333, "precision": 0.8378, "recall": 0.9394, "f1": 0.8857, "roc_auc": 0.8343, "confusion_matrix": [[9, 6], [2, 31]], "n_train": 432, "n_test": 48, "n_total": 480, "n_approved": 332, "n_denied": 148}, "roc_curve": [{"fpr": 0.0, "tpr": 0.0}, {"fpr": 0.0, "tpr": 0.030303030303030304}, {"fpr": 0.0, "tpr": 0.12121212121212122}, {"fpr": 0.06666666666666667, "tpr": 0.12121212121212122}, {"fpr": 0.06666666666666667, "tpr": 0.3333333333333333}, {"fpr": 0.13333333333333333, "tpr": 0.3333333333333333}, {"fpr": 0.13333333333333333, "tpr": 0.8181818181818182}, {"fpr": 0.2, "tpr": 0.8181818181818182}, {"fpr": 0.2, "tpr": 0.8484848484848485}, {"fpr": 0.26666666666666666, "tpr": 0.8484848484848485}, {"fpr": 0.26666666666666666, "tpr": 0.8787878787878788}, {"fpr": 0.3333333333333333, "tpr": 0.8787878787878788}, {"fpr": 0.3333333333333333, "tpr": 0.9393939393939394}, {"fpr": 0.8666666666666667, "tpr": 0.9393939393939394}, {"fpr": 0.8666666666666667, "tpr": 1.0}, {"fpr": 1.0, "tpr": 1.0}], "outcome_means": [{"Loan_Status": 0, "Gender": 0.78, "Married": 0.57, "Dependents": 0.81, "Education": 0.76, "Self_Employed": 0.16, "ApplicantIncome": 5730.19, "CoapplicantIncome": 1773.08, "LoanAmount": 153.38, "Loan_Amount_Term": 342.81, "Credit_History": 0.57, "Property_Area": 0.99}, {"Loan_Status": 1, "Gender": 0.84, "Married": 0.68, "Dependents": 0.89, "Education": 0.82, "Self_Employed": 0.13, "ApplicantIncome": 5201.09, "CoapplicantIncome": 1495.51, "LoanAmount": 140.88, "Loan_Amount_Term": 341.71, "Credit_History": 0.98, "Property_Area": 1.04}], "approval_rate_by_credit_history": {"0.0": 0.1, "1.0": 0.793}, "approval_rate_by_property": {"0": 0.612, "1": 0.78, "2": 0.653}, "scatter_sample": [{"ApplicantIncome": 3069, "LoanAmount": 71.0, "Credit_History": 1.0, "Loan_Status": 0}, {"ApplicantIncome": 6216, "LoanAmount": 133.0, "Credit_History": 1.0, "Loan_Status": 0}, {"ApplicantIncome": 5821, "LoanAmount": 144.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 18333, "LoanAmount": 500.0, "Credit_History": 1.0, "Loan_Status": 0}, {"ApplicantIncome": 3333, "LoanAmount": 158.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 6000, "LoanAmount": 140.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 3691, "LoanAmount": 110.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 3988, "LoanAmount": 50.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 10000, "LoanAmount": 155.0, "Credit_History": 1.0, "Loan_Status": 0}, {"ApplicantIncome": 1800, "LoanAmount": 47.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 2130, "LoanAmount": 70.0, "Credit_History": 1.0, "Loan_Status": 0}, {"ApplicantIncome": 4408, "LoanAmount": 120.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 3173, "LoanAmount": 137.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 2600, "LoanAmount": 160.0, "Credit_History": 1.0, "Loan_Status": 0}, {"ApplicantIncome": 2510, "LoanAmount": 140.0, "Credit_History": 1.0, "Loan_Status": 0}, {"ApplicantIncome": 3033, "LoanAmount": 95.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 4281, "LoanAmount": 100.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 1820, "LoanAmount": 100.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 2500, "LoanAmount": 120.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 2060, "LoanAmount": 134.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 2137, "LoanAmount": 137.0, "Credit_History": 0.0, "Loan_Status": 1}, {"ApplicantIncome": 9504, "LoanAmount": 275.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 1500, "LoanAmount": 103.0, "Credit_History": 0.0, "Loan_Status": 0}, {"ApplicantIncome": 2138, "LoanAmount": 99.0, "Credit_History": 0.0, "Loan_Status": 0}, {"ApplicantIncome": 8750, "LoanAmount": 130.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 2435, "LoanAmount": 75.0, "Credit_History": 1.0, "Loan_Status": 0}, {"ApplicantIncome": 3159, "LoanAmount": 108.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 2787, "LoanAmount": 146.0, "Credit_History": 0.0, "Loan_Status": 0}, {"ApplicantIncome": 5417, "LoanAmount": 267.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 2366, "LoanAmount": 136.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 2330, "LoanAmount": 100.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 2500, "LoanAmount": 103.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 20233, "LoanAmount": 480.0, "Credit_History": 1.0, "Loan_Status": 0}, {"ApplicantIncome": 5166, "LoanAmount": 128.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 1000, "LoanAmount": 110.0, "Credit_History": 1.0, "Loan_Status": 0}, {"ApplicantIncome": 3859, "LoanAmount": 96.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 3867, "LoanAmount": 62.0, "Credit_History": 1.0, "Loan_Status": 0}, {"ApplicantIncome": 3406, "LoanAmount": 123.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 2491, "LoanAmount": 104.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 4566, "LoanAmount": 100.0, "Credit_History": 1.0, "Loan_Status": 0}, {"ApplicantIncome": 5829, "LoanAmount": 138.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 3675, "LoanAmount": 108.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 2333, "LoanAmount": 95.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 1378, "LoanAmount": 167.0, "Credit_History": 1.0, "Loan_Status": 0}, {"ApplicantIncome": 2995, "LoanAmount": 60.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 3075, "LoanAmount": 139.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 3400, "LoanAmount": 123.0, "Credit_History": 0.0, "Loan_Status": 0}, {"ApplicantIncome": 9323, "LoanAmount": 380.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 5955, "LoanAmount": 315.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 6133, "LoanAmount": 324.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 5391, "LoanAmount": 130.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 4283, "LoanAmount": 172.0, "Credit_History": 1.0, "Loan_Status": 0}, {"ApplicantIncome": 1600, "LoanAmount": 239.0, "Credit_History": 1.0, "Loan_Status": 0}, {"ApplicantIncome": 3450, "LoanAmount": 162.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 5818, "LoanAmount": 184.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 6045, "LoanAmount": 115.0, "Credit_History": 0.0, "Loan_Status": 0}, {"ApplicantIncome": 5000, "LoanAmount": 151.0, "Credit_History": 1.0, "Loan_Status": 0}, {"ApplicantIncome": 3750, "LoanAmount": 100.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 8333, "LoanAmount": 165.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 2425, "LoanAmount": 143.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 4583, "LoanAmount": 112.0, "Credit_History": 1.0, "Loan_Status": 0}, {"ApplicantIncome": 1811, "LoanAmount": 54.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 10408, "LoanAmount": 259.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 2507, "LoanAmount": 56.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 33846, "LoanAmount": 260.0, "Credit_History": 1.0, "Loan_Status": 0}, {"ApplicantIncome": 6406, "LoanAmount": 150.0, "Credit_History": 1.0, "Loan_Status": 0}, {"ApplicantIncome": 3748, "LoanAmount": 110.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 6950, "LoanAmount": 175.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 2378, "LoanAmount": 9.0, "Credit_History": 1.0, "Loan_Status": 0}, {"ApplicantIncome": 4583, "LoanAmount": 84.0, "Credit_History": 1.0, "Loan_Status": 0}, {"ApplicantIncome": 5500, "LoanAmount": 105.0, "Credit_History": 0.0, "Loan_Status": 0}, {"ApplicantIncome": 3660, "LoanAmount": 187.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 4683, "LoanAmount": 185.0, "Credit_History": 1.0, "Loan_Status": 0}, {"ApplicantIncome": 5780, "LoanAmount": 192.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 3522, "LoanAmount": 81.0, "Credit_History": 1.0, "Loan_Status": 0}, {"ApplicantIncome": 9083, "LoanAmount": 228.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 9328, "LoanAmount": 188.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 3158, "LoanAmount": 89.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 2192, "LoanAmount": 45.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 2768, "LoanAmount": 155.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 2900, "LoanAmount": 71.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 3316, "LoanAmount": 88.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 2221, "LoanAmount": 60.0, "Credit_History": 0.0, "Loan_Status": 0}, {"ApplicantIncome": 18165, "LoanAmount": 125.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 2965, "LoanAmount": 155.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 3036, "LoanAmount": 158.0, "Credit_History": 0.0, "Loan_Status": 0}, {"ApplicantIncome": 2031, "LoanAmount": 113.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 1853, "LoanAmount": 114.0, "Credit_History": 1.0, "Loan_Status": 0}, {"ApplicantIncome": 8333, "LoanAmount": 280.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 4095, "LoanAmount": 151.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 8072, "LoanAmount": 253.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 3775, "LoanAmount": 110.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 3617, "LoanAmount": 107.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 2526, "LoanAmount": 145.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 3500, "LoanAmount": 81.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 4166, "LoanAmount": 98.0, "Credit_History": 0.0, "Loan_Status": 0}, {"ApplicantIncome": 4188, "LoanAmount": 115.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 3762, "LoanAmount": 135.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 7948, "LoanAmount": 480.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 2500, "LoanAmount": 55.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 3430, "LoanAmount": 128.0, "Credit_History": 0.0, "Loan_Status": 0}, {"ApplicantIncome": 9166, "LoanAmount": 244.0, "Credit_History": 1.0, "Loan_Status": 0}, {"ApplicantIncome": 2500, "LoanAmount": 67.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 4053, "LoanAmount": 158.0, "Credit_History": 0.0, "Loan_Status": 0}, {"ApplicantIncome": 10833, "LoanAmount": 234.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 2600, "LoanAmount": 116.0, "Credit_History": 0.0, "Loan_Status": 0}, {"ApplicantIncome": 4616, "LoanAmount": 134.0, "Credit_History": 1.0, "Loan_Status": 0}, {"ApplicantIncome": 4333, "LoanAmount": 110.0, "Credit_History": 1.0, "Loan_Status": 0}, {"ApplicantIncome": 3254, "LoanAmount": 50.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 3833, "LoanAmount": 110.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 2755, "LoanAmount": 65.0, "Credit_History": 1.0, "Loan_Status": 0}, {"ApplicantIncome": 3000, "LoanAmount": 100.0, "Credit_History": 0.0, "Loan_Status": 0}, {"ApplicantIncome": 2333, "LoanAmount": 102.0, "Credit_History": 0.0, "Loan_Status": 0}, {"ApplicantIncome": 3597, "LoanAmount": 119.0, "Credit_History": 0.0, "Loan_Status": 0}, {"ApplicantIncome": 4106, "LoanAmount": 40.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 2483, "LoanAmount": 90.0, "Credit_History": 0.0, "Loan_Status": 1}, {"ApplicantIncome": 4288, "LoanAmount": 133.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 3357, "LoanAmount": 144.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 3497, "LoanAmount": 116.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 9963, "LoanAmount": 180.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 2957, "LoanAmount": 81.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 2071, "LoanAmount": 94.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 2083, "LoanAmount": 128.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 4843, "LoanAmount": 151.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 11500, "LoanAmount": 286.0, "Credit_History": 0.0, "Loan_Status": 0}, {"ApplicantIncome": 3062, "LoanAmount": 111.0, "Credit_History": 0.0, "Loan_Status": 0}, {"ApplicantIncome": 7085, "LoanAmount": 84.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 5819, "LoanAmount": 120.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 2917, "LoanAmount": 84.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 3593, "LoanAmount": 132.0, "Credit_History": 0.0, "Loan_Status": 0}, {"ApplicantIncome": 4009, "LoanAmount": 116.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 2165, "LoanAmount": 70.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 2889, "LoanAmount": 45.0, "Credit_History": 0.0, "Loan_Status": 0}, {"ApplicantIncome": 5417, "LoanAmount": 168.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 3887, "LoanAmount": 162.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 2149, "LoanAmount": 178.0, "Credit_History": 0.0, "Loan_Status": 0}, {"ApplicantIncome": 2583, "LoanAmount": 104.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 6608, "LoanAmount": 137.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 10513, "LoanAmount": 160.0, "Credit_History": 0.0, "Loan_Status": 0}, {"ApplicantIncome": 4583, "LoanAmount": 255.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 3167, "LoanAmount": 74.0, "Credit_History": 1.0, "Loan_Status": 0}, {"ApplicantIncome": 4950, "LoanAmount": 125.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 3750, "LoanAmount": 176.0, "Credit_History": 1.0, "Loan_Status": 0}, {"ApplicantIncome": 15759, "LoanAmount": 55.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 4230, "LoanAmount": 112.0, "Credit_History": 1.0, "Loan_Status": 0}, {"ApplicantIncome": 7142, "LoanAmount": 138.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 3993, "LoanAmount": 207.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 10416, "LoanAmount": 187.0, "Credit_History": 0.0, "Loan_Status": 0}, {"ApplicantIncome": 2479, "LoanAmount": 59.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 3459, "LoanAmount": 25.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 2927, "LoanAmount": 111.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 12000, "LoanAmount": 496.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 4354, "LoanAmount": 136.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 2423, "LoanAmount": 130.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 10000, "LoanAmount": 214.0, "Credit_History": 1.0, "Loan_Status": 0}, {"ApplicantIncome": 3717, "LoanAmount": 120.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 9323, "LoanAmount": 75.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 3052, "LoanAmount": 100.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 5923, "LoanAmount": 211.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 3727, "LoanAmount": 131.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 3667, "LoanAmount": 144.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 5568, "LoanAmount": 175.0, "Credit_History": 1.0, "Loan_Status": 0}, {"ApplicantIncome": 16525, "LoanAmount": 150.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 3273, "LoanAmount": 81.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 2833, "LoanAmount": 126.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 3975, "LoanAmount": 55.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 8566, "LoanAmount": 210.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 6783, "LoanAmount": 130.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 4166, "LoanAmount": 44.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 4608, "LoanAmount": 140.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 3333, "LoanAmount": 70.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 7740, "LoanAmount": 128.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 3089, "LoanAmount": 121.0, "Credit_History": 0.0, "Loan_Status": 0}, {"ApplicantIncome": 2935, "LoanAmount": 98.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 3598, "LoanAmount": 100.0, "Credit_History": 1.0, "Loan_Status": 0}, {"ApplicantIncome": 5266, "LoanAmount": 187.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 39999, "LoanAmount": 600.0, "Credit_History": 0.0, "Loan_Status": 1}, {"ApplicantIncome": 1299, "LoanAmount": 17.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 4691, "LoanAmount": 100.0, "Credit_History": 1.0, "Loan_Status": 1}, {"ApplicantIncome": 2301, "LoanAmount": 78.0, "Credit_History": 1.0, "Loan_Status": 1}]}
+;
+
+const FEATURE_LABELS = {
+  Gender: "Gender", Married: "Married status", Dependents: "Dependents",
+  Education: "Education", Self_Employed: "Self-employed", ApplicantIncome: "Applicant income",
+  CoapplicantIncome: "Co-applicant income", LoanAmount: "Loan amount (thousands)",
+  Loan_Amount_Term: "Loan term (months)", Credit_History: "Credit history", Property_Area: "Property area"
+};
+
+const CATEGORICAL = {
+  Gender: [["Female", 0], ["Male", 1]],
+  Married: [["No", 0], ["Yes", 1]],
+  Education: [["Not graduate", 0], ["Graduate", 1]],
+  Self_Employed: [["No", 0], ["Yes", 1]],
+  Credit_History: [["No / poor record", 0], ["Good record", 1]],
+  Property_Area: [["Rural", 0], ["Semiurban", 1], ["Urban", 2]],
+  Dependents: [["0", 0], ["1", 1], ["2", 2], ["3+", 4]]
+};
+
+const SLIDER_FEATURES = ["ApplicantIncome", "CoapplicantIncome", "LoanAmount", "Loan_Amount_Term"];
+const SLIDER_STEP = { ApplicantIncome: 50, CoapplicantIncome: 25, LoanAmount: 1, Loan_Amount_Term: 6 };
+
+let input = {
+  Gender: 1, Married: 1, Dependents: 0, Education: 1, Self_Employed: 0,
+  ApplicantIncome: 3859, CoapplicantIncome: 1084, LoanAmount: 128, Loan_Amount_Term: 360,
+  Credit_History: 1, Property_Area: 1
+};
+
+function sigmoid(x) { return 1 / (1 + Math.exp(x)); }
+
+function predict(x) {
+  let decision = MODEL.svm_intercept;
+  const contributions = [];
+  MODEL.feature_names.forEach((f, i) => {
+    const z = (x[f] - MODEL.scaler_mean[i]) / MODEL.scaler_scale[i];
+    const c = z * MODEL.svm_coef[i];
+    decision += c;
+    contributions.push({ feature: f, contrib: c });
+  });
+  const probability = sigmoid(MODEL.probA * decision + MODEL.probB);
+  return { probability, contributions };
+}
+
+/* ---------------------------------------------------------------------
+   BACKGROUND — a scanning ledger-line field that settles green or red
+   with the live decision.
+--------------------------------------------------------------------- */
+(function () {
+  const canvas = document.getElementById("bgCanvas");
+  const ctx = canvas.getContext("2d");
+  let w, h, dpr = Math.min(window.devicePixelRatio || 1, 2), t = 0;
+  function resize() {
+    w = window.innerWidth; h = 620;
+    canvas.width = w * dpr; canvas.height = h * dpr;
+    canvas.style.width = w + "px"; canvas.style.height = h + "px";
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  window.addEventListener("resize", resize);
+  resize();
+
+  function currentColor() {
+    const p = window.__currentProbability ?? 0.7;
+    const approve = [111, 163, 125];
+    const deny = [193, 84, 74];
+    const mix = p >= 0.5 ? approve : deny;
+    const strength = Math.abs(p - 0.5) * 2;
+    return { mix, strength };
+  }
+
+  function draw() {
+    t += 1;
+    ctx.clearRect(0, 0, w, h);
+    const { mix, strength } = currentColor();
+
+    // horizontal ledger lines drifting slowly
+    const lineGap = 34;
+    for (let y = -lineGap; y < h + lineGap; y += lineGap) {
+      const wobble = Math.sin((t * 0.004) + y * 0.02) * 3;
+      ctx.beginPath();
+      ctx.strokeStyle = `rgba(${mix[0]},${mix[1]},${mix[2]},${0.05 + strength * 0.05})`;
+      ctx.lineWidth = 1;
+      ctx.moveTo(0, y + wobble);
+      ctx.lineTo(w, y + wobble);
+      ctx.stroke();
+    }
+
+    // drifting scan bar
+    const scanY = (h * 0.15) + (((t * 0.6) % (h * 1.2)));
+    const grad = ctx.createLinearGradient(0, scanY - 60, 0, scanY + 60);
+    grad.addColorStop(0, `rgba(${mix[0]},${mix[1]},${mix[2]},0)`);
+    grad.addColorStop(0.5, `rgba(${mix[0]},${mix[1]},${mix[2]},${0.10 + strength * 0.10})`);
+    grad.addColorStop(1, `rgba(${mix[0]},${mix[1]},${mix[2]},0)`);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, scanY - 60, w, 120);
+
+    // drifting particles (data points on the ledger)
+    for (let i = 0; i < 26; i++) {
+      const seed = i * 71.3;
+      const px = ((seed * 3 + t * 0.3) % (w + 60)) - 30;
+      const py = h * 0.08 + ((Math.sin(seed + t * 0.0035) + 1) / 2) * h * 0.82;
+      ctx.beginPath();
+      ctx.arc(px, py, 1 + (i % 3) * 0.5, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${mix[0]},${mix[1]},${mix[2]},0.20)`;
+      ctx.fill();
+    }
+
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+
+/* ---------------------------------------------------------------------
+   FIELD CONTROLS
+--------------------------------------------------------------------- */
+const fieldsGrid = document.getElementById("fieldsGrid");
+
+function fmtValue(name, v) {
+  if (name === "ApplicantIncome" || name === "CoapplicantIncome") return "$" + Math.round(v).toLocaleString();
+  if (name === "LoanAmount") return Math.round(v);
+  if (name === "Loan_Amount_Term") return Math.round(v);
+  return v;
+}
+
+function buildField(name) {
+  const wrap = document.createElement("div");
+  wrap.className = "field";
+
+  if (CATEGORICAL[name]) {
+    const label = document.createElement("div");
+    label.className = "field-label";
+    label.innerHTML = `<span>${FEATURE_LABELS[name]}</span>`;
+    wrap.appendChild(label);
+
+    const row = document.createElement("div");
+    row.className = "toggle-row";
+    CATEGORICAL[name].forEach(([lbl, val]) => {
+      const btn = document.createElement("div");
+      btn.className = "toggle-btn" + (input[name] === val ? " active" : "");
+      btn.textContent = lbl;
+      btn.dataset.name = name;
+      btn.dataset.val = val;
+      btn.addEventListener("click", () => {
+        input[name] = val;
+        row.querySelectorAll(".toggle-btn").forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        setPreset("custom");
+        update();
+      });
+      row.appendChild(btn);
+    });
+    wrap.appendChild(row);
+    return wrap;
+  }
+
+  // slider field
+  const stats = MODEL.feature_stats[name];
+  const step = SLIDER_STEP[name];
+  const label = document.createElement("div");
+  label.className = "field-label";
+  const valSpan = document.createElement("span");
+  valSpan.className = "field-value";
+  valSpan.id = "val-" + name;
+  valSpan.textContent = fmtValue(name, input[name]);
+  label.innerHTML = `<span>${FEATURE_LABELS[name]}</span>`;
+  label.appendChild(valSpan);
+  wrap.appendChild(label);
+
+  const track = document.createElement("div");
+  track.className = "slider-track";
+  const fillBg = document.createElement("div");
+  fillBg.className = "slider-fill";
+  const fillInner = document.createElement("div");
+  fillInner.className = "slider-fill-inner";
+  fillInner.id = "fill-" + name;
+  track.appendChild(fillBg);
+  track.appendChild(fillInner);
+
+  const slider = document.createElement("input");
+  slider.type = "range";
+  slider.min = stats.min; slider.max = stats.max; slider.step = step;
+  slider.value = input[name];
+  slider.addEventListener("input", (e) => {
+    input[name] = parseFloat(e.target.value);
+    setPreset("custom");
+    update();
+  });
+  track.appendChild(slider);
+  wrap.appendChild(track);
+  return wrap;
+}
+
+MODEL.feature_names.forEach((name) => fieldsGrid.appendChild(buildField(name)));
+
+function syncControls() {
+  MODEL.feature_names.forEach((name) => {
+    if (CATEGORICAL[name]) return;
+    const stats = MODEL.feature_stats[name];
+    const pct = ((input[name] - stats.min) / (stats.max - stats.min)) * 100;
+    const fill = document.getElementById("fill-" + name);
+    if (fill) fill.style.width = pct + "%";
+    const val = document.getElementById("val-" + name);
+    if (val) val.textContent = fmtValue(name, input[name]);
+    const slider = fieldsGrid.querySelector(`input[type=range][min="${stats.min}"]`);
+  });
+  // sync slider positions directly
+  fieldsGrid.querySelectorAll("input[type=range]").forEach((s) => {
+    // find name via closest field wrap order — rebuild map
+  });
+}
+
+// Rebuild a name->slider map for direct sync
+const sliderMap = {};
+(function mapSliders() {
+  let i = 0;
+  MODEL.feature_names.forEach((name) => {
+    if (CATEGORICAL[name]) return;
+    const wrap = fieldsGrid.children[MODEL.feature_names.indexOf(name)];
+    const s = wrap.querySelector("input[type=range]");
+    if (s) sliderMap[name] = s;
+  });
+})();
+
+function syncSliders() {
+  Object.keys(sliderMap).forEach((name) => {
+    sliderMap[name].value = input[name];
+    const stats = MODEL.feature_stats[name];
+    const pct = ((input[name] - stats.min) / (stats.max - stats.min)) * 100;
+    document.getElementById("fill-" + name).style.width = pct + "%";
+    document.getElementById("val-" + name).textContent = fmtValue(name, input[name]);
+  });
+}
+
+function syncToggles() {
+  Object.keys(CATEGORICAL).forEach((name) => {
+    fieldsGrid.querySelectorAll(`.toggle-btn[data-name="${name}"]`).forEach((btn) => {
+      btn.classList.toggle("active", parseFloat(btn.dataset.val) === input[name]);
+    });
+  });
+}
+
+/* ---------------------------------------------------------------------
+   PRESETS
+--------------------------------------------------------------------- */
+const PRESETS = {
+  reset: { Gender: 1, Married: 1, Dependents: 0, Education: 1, Self_Employed: 0, ApplicantIncome: 3859, CoapplicantIncome: 1084, LoanAmount: 128, Loan_Amount_Term: 360, Credit_History: 1, Property_Area: 1 },
+  "strong-applicant": { Gender: 1, Married: 1, Dependents: 0, Education: 1, Self_Employed: 0, ApplicantIncome: 8000, CoapplicantIncome: 2000, LoanAmount: 100, Loan_Amount_Term: 360, Credit_History: 1, Property_Area: 1 },
+  "no-credit-history": { Gender: 1, Married: 1, Dependents: 0, Education: 1, Self_Employed: 0, ApplicantIncome: 8000, CoapplicantIncome: 2000, LoanAmount: 100, Loan_Amount_Term: 360, Credit_History: 0, Property_Area: 1 }
+};
+const PRESET_LABELS = { reset: "Reset", "strong-applicant": "Strong applicant", "no-credit-history": "Same, no credit history" };
+let currentPreset = "reset";
+
+const presetRow = document.getElementById("presetRow");
+Object.keys(PRESETS).forEach((key) => {
+  const btn = document.createElement("div");
+  btn.className = "preset-btn" + (key === "reset" ? " active" : "");
+  btn.textContent = PRESET_LABELS[key];
+  btn.dataset.key = key;
+  btn.addEventListener("click", () => {
+    input = { ...PRESETS[key] };
+    setPreset(key);
+    syncSliders();
+    syncToggles();
+    update();
+  });
+  presetRow.appendChild(btn);
+});
+function setPreset(key) {
+  currentPreset = key;
+  presetRow.querySelectorAll(".preset-btn").forEach((b) => b.classList.toggle("active", b.dataset.key === key));
+}
+
+/* ---------------------------------------------------------------------
+   DECISION PANEL + COEFFICIENT CHART
+--------------------------------------------------------------------- */
+const stampEl = document.getElementById("stampText");
+const probEl = document.getElementById("probText");
+const verdictEl = document.getElementById("verdictNote");
+
+let coefChart;
+function buildCoefChart(contributions) {
+  const sorted = [...contributions].sort((a, b) => Math.abs(b.contrib) - Math.abs(a.contrib));
+  const labels = sorted.map((c) => FEATURE_LABELS[c.feature]);
+  const values = sorted.map((c) => c.contrib);
+  const colors = values.map((v) => v >= 0 ? "rgba(111,163,125,0.85)" : "rgba(193,84,74,0.85)");
+  const ctx = document.getElementById("coefChart");
+  if (coefChart) { coefChart.data.labels = labels; coefChart.data.datasets[0].data = values; coefChart.data.datasets[0].backgroundColor = colors; coefChart.update(); return; }
+  coefChart = new Chart(ctx, {
+    type: "bar",
+    data: { labels, datasets: [{ data: values, backgroundColor: colors, borderRadius: 2 }] },
+    options: {
+      indexAxis: "y",
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => c.parsed.x.toFixed(3) + " contribution" } } },
+      scales: {
+        x: { grid: { color: "#202A24" }, ticks: { color: "#6E7C72", font: { size: 11 } } },
+        y: { grid: { display: false }, ticks: { color: "#C6D0C8", font: { size: 12.5, family: "Georgia, serif" } } }
+      }
+    }
+  });
+}
+
+function update() {
+  const { probability, contributions } = predict(input);
+  window.__currentProbability = probability;
+  const approved = probability >= 0.5;
+  stampEl.textContent = approved ? "Approved" : "Denied";
+  stampEl.style.color = approved ? "var(--approve)" : "var(--deny)";
+  probEl.innerHTML = `<b>${Math.round(probability * 100)}%</b>`;
+  verdictEl.textContent = input.Credit_History === 1
+    ? "A recorded credit history is doing almost all of the work in this read."
+    : "No qualifying credit history on file — this alone pulls the estimate down sharply, regardless of income.";
+  buildCoefChart(contributions);
+  syncSliders();
+}
+
+/* ---------------------------------------------------------------------
+   STATIC DIAGNOSTICS (computed once from the notebook's own model)
+--------------------------------------------------------------------- */
+const m = MODEL.metrics;
+document.getElementById("dateRange").textContent = `${m.n_total} applications · linear SVM`;
+document.getElementById("perfLabel").textContent = `How the notebook's model performs — held-out test split, ${m.n_test} of ${m.n_total} applications`;
+
+const statRow = document.getElementById("statRow");
+const stats = [
+  { label: "Test accuracy", value: Math.round(m.notebook_test_accuracy * 100) + "%", sub: `train ${Math.round(m.notebook_train_accuracy * 100)}%`, brass: true },
+  { label: "Precision", value: m.precision.toFixed(2), sub: "of predicted-approved" },
+  { label: "Recall", value: m.recall.toFixed(2), sub: "of actual-approved found" },
+  { label: "ROC AUC", value: m.roc_auc.toFixed(2) }
+];
+stats.forEach((s) => {
+  const el = document.createElement("div");
+  el.className = "stat-card";
+  el.innerHTML = `<div class="stat-val${s.brass ? " brass" : ""}">${s.value}</div><div class="stat-label">${s.label}</div>${s.sub ? `<div class="stat-sub">${s.sub}</div>` : ""}`;
+  statRow.appendChild(el);
+});
+
+const cm = m.confusion_matrix;
+document.getElementById("cmGrid").innerHTML = `
+  <div></div><div class="cm-head">pred. denied</div><div class="cm-head">pred. approved</div>
+  <div class="cm-rowlabel">actual denied</div><div class="cm-cell cm-good">${cm[0][0]}</div><div class="cm-cell cm-bad">${cm[0][1]}</div>
+  <div class="cm-rowlabel">actual approved</div><div class="cm-cell cm-bad">${cm[1][0]}</div><div class="cm-cell cm-good">${cm[1][1]}</div>
+`;
+document.getElementById("cmNote").textContent = `Recall of ${m.recall.toFixed(2)} means the model still approves the large majority of genuinely approved applicants; most of its misses lean toward denying applicants who were, in fact, approved historically.`;
+
+new Chart(document.getElementById("rocChart"), {
+  type: "line",
+  data: {
+    datasets: [
+      { label: "ROC", data: MODEL.roc_curve.map(p => ({ x: p.fpr, y: p.tpr })), borderColor: "#B99B5B", borderWidth: 2, pointRadius: 0, tension: 0.15 },
+      { label: "chance", data: [{ x: 0, y: 0 }, { x: 1, y: 1 }], borderColor: "#3A4A3F", borderDash: [3, 4], borderWidth: 1, pointRadius: 0 }
+    ]
+  },
+  options: {
+    plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => `fpr ${c.parsed.x.toFixed(2)}, tpr ${c.parsed.y.toFixed(2)}` } } },
+    scales: {
+      x: { type: "linear", min: 0, max: 1, title: { display: true, text: "false-positive rate", color: "#5B6960", font: { size: 11 } }, grid: { color: "#202A24" }, ticks: { color: "#6E7C72", font: { size: 11 } } },
+      y: { min: 0, max: 1, grid: { color: "#202A24" }, ticks: { color: "#6E7C72", font: { size: 11 } } }
+    }
+  }
+});
+document.getElementById("rocLabel").textContent = `ROC curve — AUC ${m.roc_auc.toFixed(3)}`;
+
+const creditLabels = Object.keys(MODEL.approval_rate_by_credit_history).sort();
+new Chart(document.getElementById("creditBarChart"), {
+  type: "bar",
+  data: {
+    labels: creditLabels.map(k => k === "0.0" ? "No history" : "Good history"),
+    datasets: [{ data: creditLabels.map(k => MODEL.approval_rate_by_credit_history[k]), backgroundColor: ["#C1544A", "#6FA37D"], borderRadius: 2 }]
+  },
+  options: {
+    plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => Math.round(c.parsed.y * 100) + "% approved" } } },
+    scales: {
+      x: { grid: { display: false }, ticks: { color: "#C6D0C8", font: { size: 12.5, family: "Georgia, serif" } } },
+      y: { min: 0, max: 1, grid: { color: "#202A24" }, ticks: { color: "#6E7C72", font: { size: 11 }, callback: (v) => Math.round(v * 100) + "%" } }
+    }
+  }
+});
+
+const propLabels = Object.keys(MODEL.approval_rate_by_property).sort();
+const propNames = { "0": "Rural", "1": "Semiurban", "2": "Urban" };
+new Chart(document.getElementById("propBarChart"), {
+  type: "bar",
+  data: {
+    labels: propLabels.map(k => propNames[k]),
+    datasets: [{ data: propLabels.map(k => MODEL.approval_rate_by_property[k]), backgroundColor: "#B99B5B", borderRadius: 2 }]
+  },
+  options: {
+    plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => Math.round(c.parsed.y * 100) + "% approved" } } },
+    scales: {
+      x: { grid: { display: false }, ticks: { color: "#C6D0C8", font: { size: 12.5, family: "Georgia, serif" } } },
+      y: { min: 0, max: 1, grid: { color: "#202A24" }, ticks: { color: "#6E7C72", font: { size: 11 }, callback: (v) => Math.round(v * 100) + "%" } }
+    }
+  }
+});
+
+const scatterDenied = MODEL.scatter_sample.filter(p => p.Loan_Status === 0).map(p => ({ x: p.ApplicantIncome, y: p.LoanAmount }));
+const scatterApproved = MODEL.scatter_sample.filter(p => p.Loan_Status === 1).map(p => ({ x: p.ApplicantIncome, y: p.LoanAmount }));
+let scatterChart = new Chart(document.getElementById("scatterChart"), {
+  type: "scatter",
+  data: {
+    datasets: [
+      { label: "Denied", data: scatterDenied, backgroundColor: "rgba(193,84,74,0.55)", pointRadius: 3 },
+      { label: "Approved", data: scatterApproved, backgroundColor: "rgba(111,163,125,0.55)", pointRadius: 3 },
+      { label: "Current applicant", data: [{ x: input.ApplicantIncome, y: input.LoanAmount }], backgroundColor: "#B99B5B", pointRadius: 7, pointStyle: "star" }
+    ]
+  },
+  options: {
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { title: { display: true, text: "applicant income", color: "#5B6960", font: { size: 11 } }, grid: { color: "#202A24" }, ticks: { color: "#6E7C72", font: { size: 11 } } },
+      y: { title: { display: true, text: "loan amount (thousands)", color: "#5B6960", font: { size: 11 } }, grid: { color: "#202A24" }, ticks: { color: "#6E7C72", font: { size: 11 } } }
+    }
+  }
+});
+
+const origUpdate = update;
+update = function () {
+  origUpdate();
+  scatterChart.data.datasets[2].data = [{ x: input.ApplicantIncome, y: input.LoanAmount }];
+  scatterChart.update();
+};
+
+document.getElementById("footerNote").textContent =
+  `Trained on ${m.n_total} applications from the uploaded dataset after dropping incomplete rows, regressing loan status on all eleven ` +
+  `fields with a linear-kernel SVM. Reported accuracy, precision, recall and AUC are the notebook's own unscaled model; the live gauge above ` +
+  `runs a standardized copy of the same model with Platt-scaled probabilities for the visualization. This is a demonstration of the notebook's ` +
+  `model, not a lending decision or financial advice.`;
+
+update();
+</script>
+</body>
+</html>
